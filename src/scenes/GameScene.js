@@ -6,14 +6,32 @@ import Packet from '../objects/Packet';
 import Malware from '../objects/Malware';
 import { soundEngine } from '../audio/SoundEngine';
 
-// Random network event messages
+// Random network event messages — expanded with more surprises
 const NETWORK_EVENTS = [
-    { msg: '⚡ TRAFFIC SPIKE — Links reshuffled!', action: 'shuffleCongestion' },
-    { msg: '🔒 FIREWALL POLICY UPDATE — Timing changed!', action: 'speedFirewall' },
-    { msg: '🐛 WORM DETECTED — Malware speeds up!', action: 'speedMalware' },
-    { msg: '📡 SIGNAL BOOST — Packet speed up!', action: 'boostSpeed' },
-    { msg: '🌐 DNS RESOLUTION DELAY...', action: 'freezePacket' },
+    { msg: '⚡ TRAFFIC SPIKE — Links reshuffled!', action: 'shuffleCongestion', weight: 3 },
+    { msg: '🔒 FIREWALL POLICY UPDATE — Timing changed!', action: 'speedFirewall', weight: 2 },
+    { msg: '🐛 WORM DETECTED — Malware speeds up!', action: 'speedMalware', weight: 2 },
+    { msg: '📡 SIGNAL BOOST — Packet speed up!', action: 'boostSpeed', weight: 2 },
+    { msg: '🌐 DNS RESOLUTION DELAY...', action: 'freezePacket', weight: 2 },
+    { msg: '💥 EMP BURST — Labels scrambled!', action: 'empBlackout', weight: 2 },
+    { msg: '☣️ PACKET CORRUPTION — Integrity draining!', action: 'corruptPacket', weight: 1 },
+    { msg: '🔀 EMERGENCY ROUTE — Shortcut opened!', action: 'emergencyRoute', weight: 1 },
+    { msg: '⚡ POWER SURGE — Brief invincibility!', action: 'powerSurge', weight: 1 },
+    { msg: '🔥 NODE OVERLOAD — Path blocked!', action: 'nodeOverload', weight: 2 },
+    { msg: '💰 BANDWIDTH BONUS — 2x score!', action: 'scoreBoost', weight: 1 },
+    { msg: '🐌 LAG SPIKE — Everything slows...', action: 'lagSpike', weight: 2 },
 ];
+
+// Weighted random selection
+function pickWeightedEvent() {
+    const totalWeight = NETWORK_EVENTS.reduce((s, e) => s + e.weight, 0);
+    let r = Math.random() * totalWeight;
+    for (const event of NETWORK_EVENTS) {
+        r -= event.weight;
+        if (r <= 0) return event;
+    }
+    return NETWORK_EVENTS[0];
+}
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -44,10 +62,12 @@ export default class GameScene extends Phaser.Scene {
         for (let y = 0; y <= height; y += 40) { gridGfx.moveTo(0, y); gridGfx.lineTo(width, y); }
         gridGfx.strokePath();
 
-        // Scanline
-        const scanline = this.add.graphics().setDepth(50).setAlpha(0.03);
-        scanline.fillStyle(0x00ffcc, 1);
-        for (let y = 0; y < height; y += 4) scanline.fillRect(0, y, width, 1);
+        // ── Scanline overlay ──
+        const scanGfx = this.add.graphics().setDepth(100).setAlpha(0.03);
+        for (let y = 0; y < height; y += 4) {
+            scanGfx.fillStyle(0x000000, 1);
+            scanGfx.fillRect(0, y, width, 2);
+        }
 
         // ── Level title ──
         const levelTitle = this.add.text(width / 2, 50, `LEVEL ${levelData.id}: ${levelData.name.toUpperCase()}`, {
@@ -56,7 +76,7 @@ export default class GameScene extends Phaser.Scene {
         }).setOrigin(0.5).setAlpha(0).setDepth(30);
         this.tweens.add({ targets: levelTitle, alpha: 0.8, y: 40, duration: 800, ease: 'Power2' });
 
-        // Subtitle flash
+        // ── Level title flash ──
         const sub = this.add.text(width / 2, height * 0.5, levelData.subtitle.toUpperCase(), {
             fontFamily: '"Courier New", monospace', fontSize: '28px',
             color: '#00ffcc', fontStyle: 'bold',
@@ -69,6 +89,8 @@ export default class GameScene extends Phaser.Scene {
         this.links = [];
         this.malwares = [];
         this._neighborLabels = [];
+        this._overloadedNodes = new Set();
+        this._scoreMultiplier = 1;
         const nodeMap = {};
 
         const marginX = 60, marginY = 80;
@@ -103,19 +125,20 @@ export default class GameScene extends Phaser.Scene {
             });
         }
 
-        // Source
-        const sourceNode = nodeMap['src'];
-        this.packet = new Packet(this, sourceNode.x, sourceNode.y, sourceNode);
-
         // Malware
         if (levelData.malware) {
-            levelData.malware.forEach(mId => {
-                const mNode = nodeMap[mId];
-                if (mNode) this.malwares.push(new Malware(this, mNode.x, mNode.y, mNode));
+            levelData.malware.forEach(mwId => {
+                const node = nodeMap[mwId];
+                if (node) {
+                    const mw = new Malware(this, node.x, node.y, node);
+                    this.malwares.push(mw);
+                }
             });
         }
 
-        // Show initial neighbor labels
+        // ── Create Packet ──
+        const sourceNode = this.nodes.find(n => n.type === 'source');
+        this.packet = new Packet(this, sourceNode.x, sourceNode.y, sourceNode);
         this._updateNeighborLabels();
 
         // ── Launch UI ──
@@ -159,9 +182,12 @@ export default class GameScene extends Phaser.Scene {
             this._updateNeighborLabels();
         });
 
-        // ── Random Events ──
+        // ── Random Events — trigger first one early, then frequently ──
+        this.time.delayedCall(Phaser.Math.Between(3000, 5000), () => {
+            this._triggerRandomEvent();
+        });
         this._eventTimer = this.time.addEvent({
-            delay: Phaser.Math.Between(8000, 14000),
+            delay: Phaser.Math.Between(5000, 9000),
             callback: this._triggerRandomEvent,
             callbackScope: this,
             loop: true,
@@ -179,15 +205,19 @@ export default class GameScene extends Phaser.Scene {
                 }
                 if (this.timeRemaining <= 0) {
                     soundEngine.gameOver();
-                    this.events.emit('gameOver', 'Time Expired — Too slow!');
+                    this.events.emit('gameOver', 'Time expired — too slow!');
                 }
             },
+            callbackScope: this,
             loop: true,
         });
 
         // ── Level Complete / Game Over ──
         this.events.on('levelComplete', (score) => {
+            if (this._gameOver) return;
             this._gameOver = true;
+            // Apply score multiplier
+            score = Math.floor(score * this._scoreMultiplier);
             this.time.delayedCall(600, () => {
                 this.scene.stop('UIScene');
                 this.scene.start('LevelCompleteScene', {
@@ -233,24 +263,24 @@ export default class GameScene extends Phaser.Scene {
     _triggerRandomEvent() {
         if (this._gameOver) return;
 
-        const event = Phaser.Utils.Array.GetRandom(NETWORK_EVENTS);
+        const event = pickWeightedEvent();
         soundEngine.alert();
         this.events.emit('showToast', event.msg);
         this.events.emit('networkEvent', event.msg);
 
         switch (event.action) {
             case 'shuffleCongestion':
-                // Randomly change which links are congested
                 this.links.forEach(link => {
-                    if (Math.random() < 0.3) {
+                    if (Math.random() < 0.4) {
                         link.isCongested = !link.isCongested;
                         link.draw();
                     }
                 });
+                // Screen flash
+                this.cameras.main.flash(200, 20, 40, 60, true);
                 break;
 
             case 'speedFirewall':
-                // Temporarily speed up firewall toggling
                 this.nodes.forEach(node => {
                     if (node.type === 'firewall' && node._firewallTimer) {
                         node._firewallTimer.delay = 1200;
@@ -267,6 +297,7 @@ export default class GameScene extends Phaser.Scene {
 
             case 'speedMalware':
                 this.malwares.forEach(mw => { mw.speed = 150; });
+                this.cameras.main.shake(60, 0.003);
                 this.time.delayedCall(5000, () => {
                     this.malwares.forEach(mw => { mw.speed = 100; });
                 });
@@ -280,14 +311,176 @@ export default class GameScene extends Phaser.Scene {
                 break;
 
             case 'freezePacket':
-                // Brief freeze — can't move for 1.5s
-                this.packet.isMoving = true; // lock movement
+                this.packet.isMoving = true;
                 this.cameras.main.shake(80, 0.003);
+                // Visual freeze overlay
+                const freezeOverlay = this.add.rectangle(
+                    this.scale.width / 2, this.scale.height / 2,
+                    this.scale.width, this.scale.height, 0x0044ff, 0.08
+                ).setDepth(95);
                 this.time.delayedCall(1500, () => {
                     if (this.packet) this.packet.isMoving = false;
+                    freezeOverlay.destroy();
+                });
+                break;
+
+            case 'empBlackout': {
+                // Temporarily hide all node labels and number hints
+                const labels = [...this._neighborLabels];
+                labels.forEach(l => l.setAlpha(0));
+                this.nodes.forEach(n => {
+                    if (n._labelText) n._labelText.setAlpha(0);
+                });
+                this.cameras.main.flash(300, 80, 0, 80, true);
+                this.time.delayedCall(3000, () => {
+                    labels.forEach(l => { if (l.active) l.setAlpha(1); });
+                    this.nodes.forEach(n => {
+                        if (n._labelText) n._labelText.setAlpha(1);
+                    });
+                    this.events.emit('showToast', '✅ EMP cleared — labels restored');
+                });
+                break;
+            }
+
+            case 'corruptPacket':
+                // Gradual integrity drain
+                if (!this.packet.isShielded) {
+                    this.cameras.main.shake(150, 0.008);
+                    const drainTimer = this.time.addEvent({
+                        delay: 500,
+                        callback: () => {
+                            if (this.packet && !this.packet.isShielded) {
+                                this.packet.integrity = Math.max(0, this.packet.integrity - 3);
+                                this.events.emit('updateHUD', {
+                                    ttl: this.packet.ttl,
+                                    integrity: this.packet.integrity,
+                                });
+                            }
+                        },
+                        repeat: 5,
+                    });
+                    // Red flash warning
+                    const corruptVfx = this.add.rectangle(
+                        this.scale.width / 2, this.scale.height / 2,
+                        this.scale.width, this.scale.height, 0xff0000, 0.06
+                    ).setDepth(95);
+                    this.time.delayedCall(3000, () => corruptVfx.destroy());
+                } else {
+                    this.events.emit('showToast', '🛡 Shield absorbed corruption!');
+                }
+                break;
+
+            case 'emergencyRoute': {
+                // Create a temporary shortcut link
+                const nonAdjacentPairs = [];
+                for (let i = 0; i < this.nodes.length; i++) {
+                    for (let j = i + 1; j < this.nodes.length; j++) {
+                        const a = this.nodes[i], b = this.nodes[j];
+                        if (!a.neighbors.includes(b) && a.type !== 'source' && b.type !== 'source') {
+                            nonAdjacentPairs.push([a, b]);
+                        }
+                    }
+                }
+                if (nonAdjacentPairs.length > 0) {
+                    const [a, b] = Phaser.Utils.Array.GetRandom(nonAdjacentPairs);
+                    const link = new Link(this, a, b, false);
+                    link._lineGfx.setAlpha(0.6);
+                    this.links.push(link);
+                    a.addNeighbor(b); b.addNeighbor(a);
+                    a.neighborLinks.set(b.id, link);
+                    b.neighborLinks.set(a.id, link);
+                    this._updateNeighborLabels();
+                    // Flash the new link
+                    this.tweens.add({
+                        targets: link._lineGfx, alpha: { from: 0, to: 0.6 },
+                        duration: 200, yoyo: true, repeat: 3,
+                    });
+                    // Remove after 8 seconds
+                    this.time.delayedCall(8000, () => {
+                        a.neighbors = a.neighbors.filter(n => n !== b);
+                        b.neighbors = b.neighbors.filter(n => n !== a);
+                        a.neighborLinks.delete(b.id);
+                        b.neighborLinks.delete(a.id);
+                        const idx = this.links.indexOf(link);
+                        if (idx > -1) this.links.splice(idx, 1);
+                        link.destroy();
+                        this._updateNeighborLabels();
+                        this.events.emit('showToast', '🔀 Emergency route closed');
+                    });
+                }
+                break;
+            }
+
+            case 'powerSurge':
+                // Brief invincibility
+                this.packet.activateShield();
+                this.cameras.main.flash(200, 0, 60, 40, true);
+                break;
+
+            case 'nodeOverload': {
+                // Temporarily block a random non-essential node
+                const candidates = this.nodes.filter(n =>
+                    n.type !== 'source' && n.type !== 'server' &&
+                    n !== this.packet.currentNode && !this._overloadedNodes.has(n)
+                );
+                if (candidates.length > 0) {
+                    const target = Phaser.Utils.Array.GetRandom(candidates);
+                    this._overloadedNodes.add(target);
+                    // Visual: red pulse
+                    const warningCircle = this.add.circle(target.x, target.y, 35, 0xff0000, 0.2).setDepth(5);
+                    const warningText = this.add.text(target.x, target.y - 40, '⛔ OVERLOADED', {
+                        fontFamily: '"Courier New", monospace', fontSize: '10px',
+                        color: '#ff4444', fontStyle: 'bold',
+                    }).setOrigin(0.5).setDepth(80);
+                    this.tweens.add({
+                        targets: warningCircle, scaleX: 1.3, scaleY: 1.3, alpha: 0.4,
+                        duration: 600, yoyo: true, repeat: -1,
+                    });
+
+                    // Store original blocked state
+                    const wasBlocked = target.isBlocked;
+                    target.isBlocked = true;
+
+                    this.time.delayedCall(5000, () => {
+                        this._overloadedNodes.delete(target);
+                        target.isBlocked = wasBlocked;
+                        warningCircle.destroy();
+                        warningText.destroy();
+                        this.events.emit('showToast', `✅ ${target.label} back online`);
+                    });
+                }
+                break;
+            }
+
+            case 'scoreBoost':
+                this._scoreMultiplier = 2;
+                this.cameras.main.flash(150, 60, 60, 0, true);
+                this.time.delayedCall(6000, () => {
+                    this._scoreMultiplier = 1;
+                    this.events.emit('showToast', '💰 Score bonus expired');
+                });
+                break;
+
+            case 'lagSpike':
+                // Everything goes slow-mo briefly
+                this.packet.speed = 80;
+                this.malwares.forEach(mw => { mw.speed = 40; });
+                // Desaturated overlay
+                const lagOverlay = this.add.rectangle(
+                    this.scale.width / 2, this.scale.height / 2,
+                    this.scale.width, this.scale.height, 0x222244, 0.12
+                ).setDepth(95);
+                this.time.delayedCall(3000, () => {
+                    if (this.packet) this.packet.speed = 220;
+                    this.malwares.forEach(mw => { mw.speed = 100; });
+                    lagOverlay.destroy();
+                    this.events.emit('showToast', '✅ Connection stabilized');
                 });
                 break;
         }
+
+        // Schedule next event — randomize the delay each time
+        if (this._eventTimer) this._eventTimer.delay = Phaser.Math.Between(5000, 9000);
     }
 
     update(time, delta) {
