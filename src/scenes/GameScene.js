@@ -384,7 +384,7 @@ export default class GameScene extends Phaser.Scene {
                 if (nonAdjacentPairs.length > 0) {
                     const [a, b] = Phaser.Utils.Array.GetRandom(nonAdjacentPairs);
                     const link = new Link(this, a, b, false);
-                    link._lineGfx.setAlpha(0.6);
+                    link.setAlpha(0.6);
                     this.links.push(link);
                     a.addNeighbor(b); b.addNeighbor(a);
                     a.neighborLinks.set(b.id, link);
@@ -392,7 +392,7 @@ export default class GameScene extends Phaser.Scene {
                     this._updateNeighborLabels();
                     // Flash the new link
                     this.tweens.add({
-                        targets: link._lineGfx, alpha: { from: 0, to: 0.6 },
+                        targets: link, alpha: { from: 0, to: 0.6 },
                         duration: 200, yoyo: true, repeat: 3,
                     });
                     // Remove after 8 seconds

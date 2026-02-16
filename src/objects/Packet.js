@@ -372,16 +372,16 @@ export default class Packet extends Phaser.GameObjects.Container {
             return;
         }
 
-        // Pick a random neighbor (not where we came from if possible)
-        const candidates = neighbors.filter(n => n !== this.currentNode);
-        const target = Phaser.Utils.Array.GetRandom(candidates.length > 0 ? candidates : neighbors);
+        // Pick ANY random neighbor — load balancers are unpredictable!
+        const target = Phaser.Utils.Array.GetRandom(neighbors);
 
         this.scene.events.emit('showToast', `🎲 LOAD BALANCER — Redirected to ${target.label}!`);
-        this.scene.cameras.main.shake(60, 0.004);
+        this.scene.cameras.main.shake(80, 0.006);
+        this.scene.cameras.main.flash(100, 60, 30, 0, true);
         soundEngine.alert();
 
         // Auto-move to random neighbor after brief delay
-        this.scene.time.delayedCall(500, () => {
+        this.scene.time.delayedCall(300, () => {
             if (!this._gameOver) this.moveTo(target);
         });
     }

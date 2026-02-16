@@ -203,18 +203,18 @@ export default class UIScene extends Phaser.Scene {
         xLines.strokePath();
         this.tweens.add({ targets: xLines, alpha: 1, duration: 300, delay: 300 });
 
-        const title = this.add.text(width / 2, height * 0.33, 'TRANSMISSION FAILED', {
+        const title = this.add.text(width / 2, height * 0.28, 'TRANSMISSION FAILED', {
             fontFamily: '"Courier New", monospace', fontSize: '48px',
             fontStyle: 'bold', color: '#ff3333',
             stroke: '#330000', strokeThickness: 2,
         }).setOrigin(0.5).setAlpha(0).setDepth(82);
 
-        const reasonText = this.add.text(width / 2, height * 0.44, reason.toUpperCase(), {
+        const reasonText = this.add.text(width / 2, height * 0.39, reason.toUpperCase(), {
             fontFamily: '"Courier New", monospace', fontSize: '20px', color: '#ff6666',
         }).setOrigin(0.5).setAlpha(0).setDepth(82);
 
         const levelData = LEVELS[this.levelIndex];
-        const fact = this.add.text(width / 2, height * 0.56, `💡 ${levelData.fact}`, {
+        const fact = this.add.text(width / 2, height * 0.50, `💡 ${levelData.fact}`, {
             fontFamily: '"Courier New", monospace', fontSize: '15px',
             color: '#668899', wordWrap: { width: 700 }, align: 'center',
         }).setOrigin(0.5).setAlpha(0).setDepth(82);
@@ -223,27 +223,71 @@ export default class UIScene extends Phaser.Scene {
         this.tweens.add({ targets: reasonText, alpha: 1, duration: 400, delay: 600 });
         this.tweens.add({ targets: fact, alpha: 1, duration: 400, delay: 800 });
 
-        // Retry button
-        const btnY = height * 0.72;
-        const btnBg = this.add.graphics().setDepth(82).setAlpha(0);
-        btnBg.fillStyle(0x1a0000, 1);
-        btnBg.fillRoundedRect(width / 2 - 140, btnY - 22, 280, 50, 10);
-        btnBg.lineStyle(2, 0xff3333, 0.6);
-        btnBg.strokeRoundedRect(width / 2 - 140, btnY - 22, 280, 50, 10);
+        // ── Retry button ──
+        const retryY = height * 0.64;
+        const retryBg = this.add.graphics().setDepth(82).setAlpha(0);
+        retryBg.fillStyle(0x1a0000, 1);
+        retryBg.fillRoundedRect(width / 2 - 140, retryY - 22, 280, 50, 10);
+        retryBg.lineStyle(2, 0xff3333, 0.6);
+        retryBg.strokeRoundedRect(width / 2 - 140, retryY - 22, 280, 50, 10);
 
-        const btnText = this.add.text(width / 2, btnY + 3, '↻  RETRY TRANSMISSION', {
+        const retryText = this.add.text(width / 2, retryY + 3, '↻  RETRY TRANSMISSION', {
             fontFamily: '"Courier New", monospace', fontSize: '18px', color: '#ff5555',
         }).setOrigin(0.5).setDepth(82).setAlpha(0);
 
-        const btnZone = this.add.zone(width / 2, btnY + 3, 280, 50).setInteractive({ useHandCursor: true }).setDepth(82);
-        btnZone.on('pointerover', () => btnText.setColor('#ffffff'));
-        btnZone.on('pointerout', () => btnText.setColor('#ff5555'));
-        btnZone.on('pointerdown', () => {
+        const retryZone = this.add.zone(width / 2, retryY + 3, 280, 50).setInteractive({ useHandCursor: true }).setDepth(82);
+        retryZone.on('pointerover', () => retryText.setColor('#ffffff'));
+        retryZone.on('pointerout', () => retryText.setColor('#ff5555'));
+        retryZone.on('pointerdown', () => {
             soundEngine.click();
             this.scene.stop('UIScene');
             this.scene.get('GameScene').scene.restart({ level: this.levelIndex });
         });
 
-        this.tweens.add({ targets: [btnBg, btnText], alpha: 1, duration: 400, delay: 1000 });
+        // ── Level Select button ──
+        const selectY = height * 0.76;
+        const selectBg = this.add.graphics().setDepth(82).setAlpha(0);
+        selectBg.fillStyle(0x0a1525, 1);
+        selectBg.fillRoundedRect(width / 2 - 140, selectY - 22, 280, 50, 10);
+        selectBg.lineStyle(2, 0x4488aa, 0.5);
+        selectBg.strokeRoundedRect(width / 2 - 140, selectY - 22, 280, 50, 10);
+
+        const selectText = this.add.text(width / 2, selectY + 3, '📋  LEVEL SELECT', {
+            fontFamily: '"Courier New", monospace', fontSize: '18px', color: '#4488aa',
+        }).setOrigin(0.5).setDepth(82).setAlpha(0);
+
+        const selectZone = this.add.zone(width / 2, selectY + 3, 280, 50).setInteractive({ useHandCursor: true }).setDepth(82);
+        selectZone.on('pointerover', () => selectText.setColor('#66ccff'));
+        selectZone.on('pointerout', () => selectText.setColor('#4488aa'));
+        selectZone.on('pointerdown', () => {
+            soundEngine.click();
+            this.scene.stop('UIScene');
+            this.scene.get('GameScene').scene.start('LevelSelectScene');
+        });
+
+        // ── Menu button ──
+        const menuY = height * 0.88;
+        const menuBg = this.add.graphics().setDepth(82).setAlpha(0);
+        menuBg.fillStyle(0x0a1525, 1);
+        menuBg.fillRoundedRect(width / 2 - 140, menuY - 22, 280, 50, 10);
+        menuBg.lineStyle(2, 0x334455, 0.5);
+        menuBg.strokeRoundedRect(width / 2 - 140, menuY - 22, 280, 50, 10);
+
+        const menuText = this.add.text(width / 2, menuY + 3, '⬅  MAIN MENU', {
+            fontFamily: '"Courier New", monospace', fontSize: '18px', color: '#556677',
+        }).setOrigin(0.5).setDepth(82).setAlpha(0);
+
+        const menuZone = this.add.zone(width / 2, menuY + 3, 280, 50).setInteractive({ useHandCursor: true }).setDepth(82);
+        menuZone.on('pointerover', () => menuText.setColor('#99bbcc'));
+        menuZone.on('pointerout', () => menuText.setColor('#556677'));
+        menuZone.on('pointerdown', () => {
+            soundEngine.click();
+            this.scene.stop('UIScene');
+            this.scene.get('GameScene').scene.start('MenuScene');
+        });
+
+        this.tweens.add({ targets: [retryBg, retryText], alpha: 1, duration: 400, delay: 1000 });
+        this.tweens.add({ targets: [selectBg, selectText], alpha: 1, duration: 400, delay: 1200 });
+        this.tweens.add({ targets: [menuBg, menuText], alpha: 1, duration: 400, delay: 1400 });
     }
 }
