@@ -51,9 +51,10 @@ export default class GameScene extends Phaser.Scene {
         this._gameOver = false;
 
         // ── Timer — difficulty curve: level 1 = 45s, levels 5-10 plateau ~55-65s ──
-        const timerTable = [45, 40, 40, 45, 50, 50, 55, 55, 60, 65];
+        const timerTable = [45, 40, 40, 45, 50, 50, 55, 55, 60, 50];
         this.levelTime = timerTable[this.levelIndex] || 50;
         this.timeRemaining = this.levelTime;
+        this._isBossLevel = !!levelData.boss;
 
         // ── Animated grid background ──
         const gridGfx = this.add.graphics().setDepth(0);
@@ -79,10 +80,22 @@ export default class GameScene extends Phaser.Scene {
         // ── Level title flash ──
         const sub = this.add.text(width / 2, height * 0.5, levelData.subtitle.toUpperCase(), {
             fontFamily: '"Courier New", monospace', fontSize: '28px',
-            color: '#00ffcc', fontStyle: 'bold',
+            color: this._isBossLevel ? '#ff3333' : '#00ffcc', fontStyle: 'bold',
         }).setOrigin(0.5).setAlpha(0).setDepth(90);
         this.tweens.add({ targets: sub, alpha: 1, duration: 400, delay: 200 });
         this.tweens.add({ targets: sub, alpha: 0, y: height * 0.45, duration: 600, delay: 1500 });
+
+        // ── Boss intro sequence ──
+        if (this._isBossLevel) {
+            this.cameras.main.flash(600, 40, 0, 0, true);
+            this.cameras.main.shake(400, 0.008);
+            const bossWarning = this.add.text(width / 2, height * 0.38, '⚠ ZERO-DAY DETECTED', {
+                fontFamily: '"Courier New", monospace', fontSize: '18px',
+                color: '#ff4444', fontStyle: 'bold',
+            }).setOrigin(0.5).setAlpha(0).setDepth(91);
+            this.tweens.add({ targets: bossWarning, alpha: 1, duration: 300, delay: 500 });
+            this.tweens.add({ targets: bossWarning, alpha: 0, duration: 500, delay: 2500 });
+        }
 
         // ── Build Level ──
         this.nodes = [];
@@ -183,15 +196,44 @@ export default class GameScene extends Phaser.Scene {
         });
 
         // ── Random Events — trigger first one early, then frequently ──
-        this.time.delayedCall(Phaser.Math.Between(3000, 5000), () => {
+        const eventStartDelay = this._isBossLevel ? Phaser.Math.Between(1500, 3000) : Phaser.Math.Between(3000, 5000);
+        this.time.delayedCall(eventStartDelay, () => {
             this._triggerRandomEvent();
         });
+        const eventLoopDelay = this._isBossLevel ? Phaser.Math.Between(2000, 4000) : Phaser.Math.Between(5000, 9000);
         this._eventTimer = this.time.addEvent({
-            delay: Phaser.Math.Between(5000, 9000),
+            delay: eventLoopDelay,
             callback: this._triggerRandomEvent,
             callbackScope: this,
             loop: true,
         });
+
+        // ── Boss Wave — periodic malware spawns on boss level ──
+        if (this._isBossLevel) {
+            this._bossWaveTimer = this.time.addEvent({
+                delay: 12000,
+                callback: () => {
+                    if (this._gameOver) return;
+                    // Spawn malware on a random non-essential node
+                    const candidates = this.nodes.filter(n =>
+                        n.type !== 'source' && n.type !== 'server' &&
+                        n !== this.packet.currentNode
+                    );
+                    if (candidates.length > 0) {
+                        const target = Phaser.Utils.Array.GetRandom(candidates);
+                        const mw = new Malware(this, target.x, target.y, target);
+                        this.malwares.push(mw);
+                        this.cameras.main.shake(200, 0.01);
+                        this.cameras.main.flash(300, 50, 0, 0, true);
+                        this.events.emit('showToast', '🔴 BOSS WAVE — New malware deployed!');
+                        this.events.emit('networkEvent', '🔴 BOSS WAVE — New malware deployed!');
+                        soundEngine.alert();
+                    }
+                },
+                callbackScope: this,
+                loop: true,
+            });
+        }
 
         // ── Timer countdown ──
         this._timerEvent = this.time.addEvent({
@@ -479,8 +521,12 @@ export default class GameScene extends Phaser.Scene {
                 break;
         }
 
-        // Schedule next event — randomize the delay each time
-        if (this._eventTimer) this._eventTimer.delay = Phaser.Math.Between(5000, 9000);
+        // Schedule next event — boss level has faster event cycling
+        if (this._eventTimer) {
+            this._eventTimer.delay = this._isBossLevel
+                ? Phaser.Math.Between(2000, 4000)
+                : Phaser.Math.Between(5000, 9000);
+        }
     }
 
     update(time, delta) {
