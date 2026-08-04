@@ -147,10 +147,14 @@ export default class GameScene extends Phaser.Scene {
 
         // Malware
         if (levelData.malware) {
-            levelData.malware.forEach(mwId => {
-                const node = nodeMap[mwId];
+            levelData.malware.forEach(mwConfig => {
+                const nodeId = typeof mwConfig === 'string' ? mwConfig : mwConfig.node;
+                const variant = typeof mwConfig === 'string' ? 'hunter' : (mwConfig.variant || 'hunter');
+                const patrolPath = typeof mwConfig === 'string' ? [] : (mwConfig.path || []);
+
+                const node = nodeMap[nodeId];
                 if (node) {
-                    const mw = new Malware(this, node.x, node.y, node);
+                    const mw = new Malware(this, node.x, node.y, node, { variant, patrolPath });
                     this.malwares.push(mw);
                 }
             });
@@ -245,12 +249,13 @@ export default class GameScene extends Phaser.Scene {
                     );
                     if (candidates.length > 0) {
                         const target = Phaser.Utils.Array.GetRandom(candidates);
-                        const mw = new Malware(this, target.x, target.y, target);
+                        const variant = Math.random() > 0.4 ? 'zeroday' : 'hunter';
+                        const mw = new Malware(this, target.x, target.y, target, { variant });
                         this.malwares.push(mw);
                         this.cameras.main.shake(200, 0.01);
                         this.cameras.main.flash(300, 50, 0, 0, true);
-                        this.events.emit('showToast', '🔴 BOSS WAVE — New malware deployed!');
-                        this.events.emit('networkEvent', '🔴 BOSS WAVE — New malware deployed!');
+                        this.events.emit('showToast', `🔴 BOSS WAVE — New ${variant.toUpperCase()} deployed!`);
+                        this.events.emit('networkEvent', `🔴 BOSS WAVE — New ${variant.toUpperCase()} deployed!`);
                         soundEngine.alert();
                     }
                 },
@@ -362,10 +367,12 @@ export default class GameScene extends Phaser.Scene {
                 break;
 
             case 'speedMalware':
-                this.malwares.forEach(mw => { mw.speed = 150; });
+                this.malwares.forEach(mw => { mw.speed = 160; });
                 this.cameras.main.shake(60, 0.003);
                 this.time.delayedCall(5000, () => {
-                    this.malwares.forEach(mw => { mw.speed = 100; });
+                    this.malwares.forEach(mw => {
+                        mw.speed = mw.variant === 'zeroday' ? 140 : mw.variant === 'patrol' ? 90 : 100;
+                    });
                 });
                 break;
 

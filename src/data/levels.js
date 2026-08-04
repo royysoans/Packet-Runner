@@ -140,7 +140,7 @@ const LEVELS = [
             { from: 'r5', to: 'srv' },
         ],
         powerups: [{ node: 'r1', type: 'ttl' }],
-        malware: ['fw1', 'r4'],
+        malware: ['fw1', { node: 'r4', variant: 'patrol', path: ['r4', 'lb2', 'r3', 'lb1'] }],
     },
 
     // ─── LEVEL 5: THE OPEN INTERNET ───
@@ -237,7 +237,7 @@ const LEVELS = [
             { node: 'lb1', type: 'shield' },
             { node: 'r3', type: 'ttl' },
         ],
-        malware: ['r1', 'r4'],
+        malware: ['r1', { node: 'r4', variant: 'patrol', path: ['r4', 'r5', 'lb2'] }],
     },
 
     // ─── LEVEL 7: DDOS ATTACK ───
@@ -290,7 +290,7 @@ const LEVELS = [
             { node: 'sw1', type: 'shield' },
             { node: 'r5', type: 'ttl' },
         ],
-        malware: ['r1', 'r3', 'r4'],
+        malware: ['r1', { node: 'r3', variant: 'zeroday' }, 'r4'],
     },
 
     // ─── LEVEL 8: DARK WEB ───
@@ -486,7 +486,7 @@ const LEVELS = [
             { node: 'vpn1', type: 'shield' },
             { node: 'r5', type: 'ttl' },
         ],
-        malware: ['r2', 'r4', 'r6', 'r8', 'lb3'],
+        malware: ['r2', { node: 'r4', variant: 'patrol', path: ['r4', 'r6', 'r8'] }, 'r6', { node: 'lb3', variant: 'zeroday' }],
     },
 ];
 
