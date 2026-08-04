@@ -57,7 +57,7 @@ export default class LevelSelectScene extends Phaser.Scene {
             const cy = startY + row * (cardH + gapY + 20);
 
             // Determine state
-            const isUnlocked = index === 0 || progress.completed.includes(index - 1);
+            const isUnlocked = true; // All levels unlocked
             const isCompleted = progress.completed.includes(index);
             const bestScore = progress.scores[index] || 0;
 

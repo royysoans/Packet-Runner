@@ -102,6 +102,7 @@ export default class Packet extends Phaser.GameObjects.Container {
 
         let speedMult = 1;
         if (link && link.isCongested) speedMult = 0.4;
+        if (this.scene.overclockActive) speedMult *= 1.6;
         if (link) link.highlight(true);
 
         this.targetNode = targetNode;
@@ -126,7 +127,8 @@ export default class Packet extends Phaser.GameObjects.Container {
         // TTL cost — switches are cheaper (fast Layer 2 forwarding)
         let baseCost = 5;
         if (targetNode.type === 'switch') baseCost = 2;
-        const cost = link ? baseCost * link.getCost() : baseCost;
+        let cost = link ? baseCost * link.getCost() : baseCost;
+        if (this.scene.overclockActive) cost *= 2;
         this.damageTTL(cost);
     }
 
@@ -317,6 +319,23 @@ export default class Packet extends Phaser.GameObjects.Container {
                     soundEngine.powerup();
                 } else {
                     this.scene.events.emit('showToast', '🔐 VPN — Already encrypted');
+                }
+                break;
+
+            case 'honeypot':
+                this.scene.events.emit('honeypotVisited', node);
+                this.scene.events.emit('showToast', '🪤 HONEYPOT — Malware diverted!');
+                break;
+
+            case 'cache':
+                if (!node.isBurnedOut) {
+                    node.burnOut();
+                    this.ttl = Math.min(100, this.ttl + 20);
+                    this.scene.events.emit('updateHUD', { ttl: this.ttl, integrity: this.integrity });
+                    this.scene.events.emit('showToast', '💾 CACHE visited — TTL +20!');
+                    soundEngine.powerup();
+                } else {
+                    this.scene.events.emit('showToast', '💾 CACHE is depleted');
                 }
                 break;
 

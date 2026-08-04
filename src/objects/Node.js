@@ -11,6 +11,7 @@ export default class Node extends Phaser.GameObjects.Container {
         this.neighborLinks = new Map(); // nodeId -> Link reference
         this.powerup = null;
         this.isBlocked = false;
+        this.isBurnedOut = false;
         this._firewallTimer = null;
 
         scene.add.existing(this);
@@ -44,6 +45,9 @@ export default class Node extends Phaser.GameObjects.Container {
         malware: { fill: 0xff0044, glow: 0xcc0033 },
         loadbalancer: { fill: 0xcc66ff, glow: 0x9933cc },
         vpn: { fill: 0x00ffcc, glow: 0x00cc99 },
+        honeypot: { fill: 0xff5533, glow: 0xcc3311 },
+        cache: { fill: 0x33eeff, glow: 0x00aacc },
+        'cache-burned': { fill: 0x556677, glow: 0x334455 },
     };
 
     static RADIUS = {
@@ -55,6 +59,8 @@ export default class Node extends Phaser.GameObjects.Container {
         loadbalancer: 20,
         vpn: 18,
         malware: 16,
+        honeypot: 18,
+        cache: 18,
     };
 
     static SHAPES = {
@@ -66,10 +72,13 @@ export default class Node extends Phaser.GameObjects.Container {
         loadbalancer: 'circle',
         vpn: 'circle',
         malware: 'circle',
+        honeypot: 'hexagon',
+        cache: 'square',
     };
 
     _getColor() {
         if (this.type === 'firewall' && this.isBlocked) return Node.COLORS['firewall-blocked'];
+        if (this.type === 'cache' && this.isBurnedOut) return Node.COLORS['cache-burned'];
         return Node.COLORS[this.type] || Node.COLORS.router;
     }
 
@@ -138,6 +147,8 @@ export default class Node extends Phaser.GameObjects.Container {
             case 'firewall': return this.isBlocked ? '✕' : '⊞';
             case 'loadbalancer': return '⇔';
             case 'vpn': return '⊡';
+            case 'honeypot': return '⛨';
+            case 'cache': return this.isBurnedOut ? '✕' : '⛁';
             default: return '●';
         }
     }
@@ -188,6 +199,11 @@ export default class Node extends Phaser.GameObjects.Container {
         this._iconText.setText(this._getIcon());
     }
 
+    burnOut() {
+        this.isBurnedOut = true;
+        this._updateVisuals();
+    }
+
     _setupInteraction() {
         const r = this._getRadius();
         this.setSize(r * 2.5, r * 2.5);
@@ -232,6 +248,8 @@ export default class Node extends Phaser.GameObjects.Container {
             case 'firewall': return `[FIREWALL] ${this.label}\n${this.isBlocked ? '🔒 BLOCKED — wait for it to open' : '🔓 OPEN — pass through now!'}`;
             case 'loadbalancer': return `[LOAD BALANCER] ${this.label}\n🎲 WARNING: Redirects you randomly!`;
             case 'vpn': return `[VPN TUNNEL] ${this.label}\n🔐 Auto-grants encryption shield`;
+            case 'honeypot': return `[HONEYPOT] ${this.label}\n🪤 Lures all active malware for 5s on visit!`;
+            case 'cache': return `[CACHE] ${this.label}\n💾 ${this.isBurnedOut ? 'BURNED OUT — no longer active' : 'Restores +20 TTL on visit (single-use)'}`;
             default: return this.label;
         }
     }

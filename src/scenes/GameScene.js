@@ -104,6 +104,13 @@ export default class GameScene extends Phaser.Scene {
         this._neighborLabels = [];
         this._overloadedNodes = new Set();
         this._scoreMultiplier = 1;
+        this.activeHoneypotNode = null;
+        this.overclockActive = false;
+        this.overclockCooldown = 0;
+        this.scanActive = false;
+        this.scanCooldown = 0;
+        this.bestPathLinks = [];
+        this.scanGraphics = this.add.graphics().setDepth(5);
         const nodeMap = {};
 
         const marginX = 60, marginY = 80;
@@ -181,11 +188,18 @@ export default class GameScene extends Phaser.Scene {
         // ── Keyboard Input ──
         this.input.keyboard.on('keydown', (event) => {
             if (this._gameOver) return;
-            const num = parseInt(event.key);
-            if (num >= 1 && num <= 9) {
-                const neighbors = this.packet.currentNode.neighbors;
-                if (num <= neighbors.length) {
-                    this.packet.moveTo(neighbors[num - 1]);
+            const key = event.key.toLowerCase();
+            if (key === 'q') {
+                this.triggerOverclock();
+            } else if (key === 'e') {
+                this.triggerNetworkScan();
+            } else {
+                const num = parseInt(event.key);
+                if (num >= 1 && num <= 9) {
+                    const neighbors = this.packet.currentNode.neighbors;
+                    if (num <= neighbors.length) {
+                        this.packet.moveTo(neighbors[num - 1]);
+                    }
                 }
             }
         });
@@ -193,6 +207,16 @@ export default class GameScene extends Phaser.Scene {
         // ── Update neighbor labels when packet arrives ──
         this.events.on('packetArrived', () => {
             this._updateNeighborLabels();
+        });
+
+        // ── Honeypot visited event ──
+        this.events.on('honeypotVisited', (node) => {
+            this.activeHoneypotNode = node;
+            this.time.delayedCall(5000, () => {
+                if (this.activeHoneypotNode === node) {
+                    this.activeHoneypotNode = null;
+                }
+            });
         });
 
         // ── Random Events — trigger first one early, then frequently ──
@@ -531,5 +555,133 @@ export default class GameScene extends Phaser.Scene {
 
     update(time, delta) {
         this.malwares.forEach(mw => mw.update());
+
+        this.scanGraphics.clear();
+        if (this.scanActive) {
+            // Draw Malware paths
+            this.scanGraphics.lineStyle(2, 0xff0044, 0.6);
+            this.malwares.forEach(mw => {
+                if (mw.targetNode) {
+                    this._drawDottedLine(this.scanGraphics, mw.x, mw.y, mw.targetNode.x, mw.targetNode.y, 0xff0044);
+                }
+            });
+
+            // Draw Shortest Path highlights
+            this.scanGraphics.lineStyle(4, 0x00ff88, 0.5);
+            if (this.bestPathLinks && this.bestPathLinks.length > 0) {
+                this.bestPathLinks.forEach(link => {
+                    this.scanGraphics.lineBetween(link.nodeA.x, link.nodeA.y, link.nodeB.x, link.nodeB.y);
+                });
+            }
+        }
+    }
+
+    triggerOverclock() {
+        if (this.overclockCooldown > 0 || this.overclockActive || this._gameOver) return;
+        this.overclockActive = true;
+        this.overclockCooldown = 15; // 15s cooldown
+        this.events.emit('showToast', '⚡ OVERCLOCK ACTIVE — Speed boosted, double TTL cost!');
+        soundEngine.powerup();
+
+        this.time.delayedCall(6000, () => {
+            this.overclockActive = false;
+            this.events.emit('showToast', '⚡ Overclock expired');
+        });
+
+        this.time.addEvent({
+            delay: 1000,
+            repeat: 14,
+            callback: () => {
+                this.overclockCooldown = Math.max(0, this.overclockCooldown - 1);
+                this.events.emit('abilityCooldown', { type: 'overclock', cooldown: this.overclockCooldown });
+            }
+        });
+
+        this.events.emit('abilityActivated', { type: 'overclock', duration: 6 });
+    }
+
+    triggerNetworkScan() {
+        if (this.scanCooldown > 0 || this.scanActive || this._gameOver) return;
+        this.scanActive = true;
+        this.scanCooldown = 12; // 12s cooldown
+        this.events.emit('showToast', '🧭 NETWORK SCAN — Paths and optimal route revealed!');
+        soundEngine.powerup();
+
+        this._highlightBestPath();
+
+        this.time.delayedCall(5000, () => {
+            this.scanActive = false;
+            this._clearPathHighlight();
+            this.events.emit('showToast', '🧭 Network scan complete');
+        });
+
+        this.time.addEvent({
+            delay: 1000,
+            repeat: 11,
+            callback: () => {
+                this.scanCooldown = Math.max(0, this.scanCooldown - 1);
+                this.events.emit('abilityCooldown', { type: 'scan', cooldown: this.scanCooldown });
+            }
+        });
+
+        this.events.emit('abilityActivated', { type: 'scan', duration: 5 });
+    }
+
+    _highlightBestPath() {
+        const start = this.packet.currentNode;
+        const server = this.nodes.find(n => n.type === 'server');
+        if (!start || !server) return;
+
+        const queue = [[start]];
+        const visited = new Set([start.id]);
+        let path = null;
+
+        while (queue.length > 0) {
+            const currentPath = queue.shift();
+            const lastNode = currentPath[currentPath.length - 1];
+
+            if (lastNode === server) {
+                path = currentPath;
+                break;
+            }
+
+            for (const neighbor of lastNode.neighbors) {
+                if (!visited.has(neighbor.id)) {
+                    visited.add(neighbor.id);
+                    queue.push([...currentPath, neighbor]);
+                }
+            }
+        }
+
+        if (path) {
+            this.bestPathLinks = [];
+            for (let i = 0; i < path.length - 1; i++) {
+                const nodeA = path[i];
+                const nodeB = path[i + 1];
+                const link = this.links.find(l =>
+                    (l.nodeA === nodeA && l.nodeB === nodeB) ||
+                    (l.nodeB === nodeA && l.nodeA === nodeB)
+                );
+                if (link) this.bestPathLinks.push(link);
+            }
+        }
+    }
+
+    _clearPathHighlight() {
+        this.bestPathLinks = [];
+    }
+
+    _drawDottedLine(graphics, x1, y1, x2, y2, color) {
+        const dist = Phaser.Math.Distance.Between(x1, y1, x2, y2);
+        const steps = dist / 6;
+        for (let i = 0; i < steps; i += 2) {
+            const p1 = i / steps;
+            const p2 = Math.min(1, (i + 1) / steps);
+            const startX = Phaser.Math.Interpolation.Linear([x1, x2], p1);
+            const startY = Phaser.Math.Interpolation.Linear([y1, y2], p1);
+            const endX = Phaser.Math.Interpolation.Linear([x1, x2], p2);
+            const endY = Phaser.Math.Interpolation.Linear([y1, y2], p2);
+            graphics.lineBetween(startX, startY, endX, endY);
+        }
     }
 }

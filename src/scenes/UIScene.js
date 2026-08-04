@@ -150,6 +150,8 @@ export default class UIScene extends Phaser.Scene {
         gameScene.events.on('showToast', (msg) => this._showToast(msg));
         gameScene.events.on('gameOver', (reason) => this._showGameOver(reason));
 
+        this._buildAbilitiesHUD(width, height, gameScene);
+
         this.events.on('shutdown', () => {
             gameScene.events.off('updateHUD');
             gameScene.events.off('timerUpdate');
@@ -157,6 +159,142 @@ export default class UIScene extends Phaser.Scene {
             gameScene.events.off('networkEvent');
             gameScene.events.off('showToast');
             gameScene.events.off('gameOver');
+            gameScene.events.off('abilityActivated');
+            gameScene.events.off('abilityCooldown');
+        });
+    }
+
+    _buildAbilitiesHUD(width, height, gameScene) {
+        const slots = [
+            { key: 'Q', name: 'OVERCLOCK', type: 'overclock', x: width / 2 - 110, y: height - 60 },
+            { key: 'E', name: 'SCAN', type: 'scan', x: width / 2 + 10, y: height - 60 }
+        ];
+
+        this._abilityUI = {};
+
+        slots.forEach(slot => {
+            const container = this.add.container(slot.x, slot.y);
+
+            // Background card
+            const bg = this.add.graphics();
+            bg.fillStyle(0x0a1628, 0.85);
+            bg.fillRoundedRect(0, 0, 100, 44, 6);
+            bg.lineStyle(1.5, 0x4488aa, 0.4);
+            bg.strokeRoundedRect(0, 0, 100, 44, 6);
+            container.add(bg);
+
+            // Hotkey label
+            const hotkey = this.add.text(8, 6, `[${slot.key}]`, {
+                fontFamily: '"Courier New", monospace', fontSize: '11px',
+                color: '#00ffcc', fontStyle: 'bold'
+            });
+            container.add(hotkey);
+
+            // Name label
+            const name = this.add.text(8, 22, slot.name, {
+                fontFamily: '"Courier New", monospace', fontSize: '11px',
+                color: '#88bbcc', fontStyle: 'bold'
+            });
+            container.add(name);
+
+            // Cooldown overlay graphics
+            const cooldownOverlay = this.add.graphics();
+            container.add(cooldownOverlay);
+
+            // Cooldown text
+            const cdText = this.add.text(50, 22, '', {
+                fontFamily: '"Courier New", monospace', fontSize: '14px',
+                color: '#ff3333', fontStyle: 'bold'
+            }).setOrigin(0.5);
+            container.add(cdText);
+
+            // Interactive zone to allow mouse clicking too!
+            const zone = this.add.zone(50, 22, 100, 44).setInteractive({ useHandCursor: true });
+            zone.on('pointerdown', () => {
+                if (slot.type === 'overclock') {
+                    gameScene.triggerOverclock();
+                } else if (slot.type === 'scan') {
+                    gameScene.triggerNetworkScan();
+                }
+            });
+            container.add(zone);
+
+            this._abilityUI[slot.type] = {
+                bg,
+                hotkey,
+                name,
+                cooldownOverlay,
+                cdText,
+                maxCooldown: slot.type === 'overclock' ? 15 : 12
+            };
+        });
+
+        // Event listeners
+        gameScene.events.on('abilityActivated', (data) => {
+            const ui = this._abilityUI[data.type];
+            if (!ui) return;
+
+            // Highlight border as active
+            ui.bg.clear();
+            ui.bg.fillStyle(0x0d2040, 0.9);
+            ui.bg.fillRoundedRect(0, 0, 100, 44, 6);
+            ui.bg.lineStyle(2, 0xffaa00, 1);
+            ui.bg.strokeRoundedRect(0, 0, 100, 44, 6);
+
+            // Trigger visual progress representation or flashing
+            this.tweens.add({
+                targets: ui.name,
+                alpha: 0.4,
+                duration: 200,
+                yoyo: true,
+                repeat: -1
+            });
+
+            this.time.delayedCall(data.duration * 1000, () => {
+                this.tweens.killTweensOf(ui.name);
+                ui.name.setAlpha(1);
+            });
+        });
+
+        gameScene.events.on('abilityCooldown', (data) => {
+            const ui = this._abilityUI[data.type];
+            if (!ui) return;
+
+            ui.cooldownOverlay.clear();
+            if (data.cooldown > 0) {
+                // Draw translucent red/grey overlay based on cooldown pct
+                const pct = data.cooldown / ui.maxCooldown;
+                ui.cooldownOverlay.fillStyle(0x110000, 0.7);
+                ui.cooldownOverlay.fillRoundedRect(0, 0, 100, 44, 6);
+                ui.cooldownOverlay.fillStyle(0xff3333, 0.25);
+                ui.cooldownOverlay.fillRoundedRect(0, 44 * (1 - pct), 100, 44 * pct, 6);
+
+                ui.cdText.setText(`${data.cooldown}s`);
+                ui.hotkey.setColor('#445566');
+                ui.name.setColor('#445566');
+            } else {
+                ui.cdText.setText('');
+                ui.hotkey.setColor('#00ffcc');
+                ui.name.setColor('#88bbcc');
+
+                // Restore default border
+                ui.bg.clear();
+                ui.bg.fillStyle(0x0a1628, 0.85);
+                ui.bg.fillRoundedRect(0, 0, 100, 44, 6);
+                ui.bg.lineStyle(1.5, 0x4488aa, 0.4);
+                ui.bg.strokeRoundedRect(0, 0, 100, 44, 6);
+
+                // Flash border to show it's ready!
+                const flash = this.add.graphics();
+                flash.lineStyle(3, 0x00ffcc, 1);
+                flash.strokeRoundedRect(ui.bg.parentContainer.x, ui.bg.parentContainer.y, 100, 44, 6);
+                this.tweens.add({
+                    targets: flash,
+                    alpha: 0,
+                    duration: 400,
+                    onComplete: () => flash.destroy()
+                });
+            }
         });
     }
 
